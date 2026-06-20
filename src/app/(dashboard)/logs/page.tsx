@@ -1,0 +1,391 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { PageHeader } from "@/components/shared/page-header";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getAuditLogs, deleteAuditLog, clearAllAuditLogs } from "@/actions/audit-actions";
+import { Search, Download, Calendar, SlidersHorizontal, RefreshCw, Eye, EyeOff, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { exportData } from "@/lib/export-utils";
+
+export default function LogsPage() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [filteredLogs, setFilteredLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
+
+  // Filter States
+  const [search, setSearch] = useState("");
+  const [module, setModule] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const data = await getAuditLogs();
+      setLogs(data);
+      setFilteredLogs(data);
+    } catch (error) {
+      toast.error("Failed to load audit logs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const handleDeleteLog = (id: string) => {
+    if (confirm("Are you sure you want to delete this log entry?")) {
+      startTransition(async () => {
+        const res = await deleteAuditLog(id);
+        if (res.success) {
+          toast.success("Log entry deleted successfully");
+          fetchLogs();
+        } else {
+          toast.error(res.error || "Failed to delete log entry");
+        }
+      });
+    }
+  };
+
+  const handleClearAllLogs = () => {
+    if (confirm("WARNING: Are you sure you want to permanently delete ALL activity logs? This action cannot be undone.")) {
+      startTransition(async () => {
+        const res = await clearAllAuditLogs();
+        if (res.success) {
+          toast.success("All logs cleared successfully");
+          fetchLogs();
+        } else {
+          toast.error(res.error || "Failed to clear logs");
+        }
+      });
+    }
+  };
+
+  // Run filtering client-side for instant UX
+  useEffect(() => {
+    let result = [...logs];
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (log) =>
+          log.action.toLowerCase().includes(q) ||
+          log.notes.toLowerCase().includes(q) ||
+          log.entityId.toLowerCase().includes(q) ||
+          (log.user?.name && log.user.name.toLowerCase().includes(q))
+      );
+    }
+
+    if (module && module !== "all") {
+      result = result.filter((log) => log.module.toLowerCase() === module.toLowerCase());
+    }
+
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      result = result.filter((log) => new Date(log.createdAt) >= start);
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      result = result.filter((log) => new Date(log.createdAt) <= end);
+    }
+
+    setFilteredLogs(result);
+  }, [search, module, startDate, endDate, logs]);
+
+  const handleExport = (format: "csv" | "excel" | "pdf") => {
+    if (filteredLogs.length === 0) {
+      toast.error("No logs available to export");
+      return;
+    }
+
+    // Format logs for export
+    const exportItems = filteredLogs.map((log) => ({
+      Timestamp: new Date(log.createdAt).toLocaleString(),
+      User: log.user?.name || "Admin",
+      Module: log.module.toUpperCase(),
+      Action: log.action,
+      "Entity ID": log.entityId,
+      "Old Value": log.oldValue || "-",
+      "New Value": log.newValue || "-",
+      Notes: log.notes || "-",
+    }));
+
+    exportData(exportItems, format, `activity_logs_${new Date().toISOString().split("T")[0]}`);
+  };
+
+  const getModuleBadgeColor = (mod: string) => {
+    switch (mod.toLowerCase()) {
+      case "worker":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+      case "attendance":
+        return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
+      case "land":
+        return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400";
+      case "diesel":
+        return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+      case "expense":
+        return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400";
+      case "payment":
+        return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400";
+      case "advance":
+        return "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400";
+      default:
+        return "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400";
+    }
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setModule("all");
+    setStartDate("");
+    setEndDate("");
+    toast.success("Filters cleared");
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Activity Logs" description="Audit trail of all operations and database modifications">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={handleClearAllLogs} 
+            disabled={loading || isPending || logs.length === 0}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Clear Logs
+          </Button>
+          <Select onValueChange={(val: any) => handleExport(val)}>
+            <SelectTrigger className="w-[140px] h-9">
+              <Download className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Export As" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="csv">CSV Sheet</SelectItem>
+              <SelectItem value="excel">Excel Sheet</SelectItem>
+              <SelectItem value="pdf">PDF Document</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </PageHeader>
+
+      {/* Filter Card */}
+      <Card className="shadow-sm">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground border-b pb-2">
+            <SlidersHorizontal className="h-4 w-4" />
+            <span>Search & Filter Logs</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="search">Search Keywords</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="search"
+                  placeholder="Action, notes, user..."
+                  className="pl-9 h-9"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="module">Filter by Module</Label>
+              <Select value={module} onValueChange={setModule}>
+                <SelectTrigger id="module" className="h-9">
+                  <SelectValue placeholder="All Modules" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Modules</SelectItem>
+                  <SelectItem value="worker">Worker</SelectItem>
+                  <SelectItem value="attendance">Attendance</SelectItem>
+                  <SelectItem value="land">Land</SelectItem>
+                  <SelectItem value="diesel">Diesel Logs</SelectItem>
+                  <SelectItem value="expense">Expenses</SelectItem>
+                  <SelectItem value="payment">Wage Payouts</SelectItem>
+                  <SelectItem value="advance">Advances/Loans</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Start Date</Label>
+              <div className="relative">
+                <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  className="pl-9 h-9"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>End Date</Label>
+              <div className="relative">
+                <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  className="pl-9 h-9"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {(search || module !== "all" || startDate || endDate) && (
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="text-destructive hover:bg-destructive/10">
+                Clear Active Filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Logs Table */}
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-muted/50 text-muted-foreground whitespace-nowrap border-b">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Timestamp</th>
+                  <th className="px-5 py-3 font-medium">User/Admin</th>
+                  <th className="px-5 py-3 font-medium">Module</th>
+                  <th className="px-5 py-3 font-medium">Action</th>
+                  <th className="px-5 py-3 font-medium">Notes</th>
+                  <th className="px-5 py-3 font-medium text-center">Details</th>
+                  <th className="px-5 py-3 font-medium text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                        <p>Loading activity logs...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                      No logs match the current search or filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map((log) => {
+                    const isExpanded = expandedLog === log.id;
+                    const hasValues = log.oldValue || log.newValue;
+
+                    return (
+                      <optgroup key={log.id} label="Log row block" className="contents">
+                        <tr className="hover:bg-muted/30 transition-colors">
+                          <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
+                            {new Date(log.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-5 py-3 font-medium">
+                            {log.user?.name || "Admin"}
+                          </td>
+                          <td className="px-5 py-3 whitespace-nowrap">
+                            <Badge className={getModuleBadgeColor(log.module)}>
+                              {log.module.toUpperCase()}
+                            </Badge>
+                          </td>
+                          <td className="px-5 py-3 font-medium text-foreground">
+                            {log.action}
+                          </td>
+                          <td className="px-5 py-3 text-muted-foreground max-w-xs truncate">
+                            {log.notes || "-"}
+                          </td>
+                          <td className="px-5 py-3 text-center whitespace-nowrap">
+                            {hasValues ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setExpandedLog(isExpanded ? null : log.id)}
+                              >
+                                {isExpanded ? (
+                                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <Eye className="h-4 w-4 text-primary" />
+                                )}
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-center whitespace-nowrap">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeleteLog(log.id)}
+                              disabled={isPending}
+                              title="Delete Log"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                        {isExpanded && hasValues && (
+                          <tr className="bg-muted/10">
+                            <td colSpan={7} className="px-8 py-3 border-l-2 border-primary bg-muted/20">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                                <div>
+                                  <p className="font-semibold text-muted-foreground mb-1 text-[10px] uppercase">
+                                    Before Changes (Old Value)
+                                  </p>
+                                  <pre className="bg-background border rounded p-2.5 overflow-x-auto whitespace-pre-wrap max-h-48">
+                                    {log.oldValue ? JSON.stringify(JSON.parse(log.oldValue), null, 2) : "Empty"}
+                                  </pre>
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-muted-foreground mb-1 text-[10px] uppercase">
+                                    After Changes (New Value)
+                                  </p>
+                                  <pre className="bg-background border rounded p-2.5 overflow-x-auto whitespace-pre-wrap max-h-48">
+                                    {log.newValue ? JSON.stringify(JSON.parse(log.newValue), null, 2) : "Empty"}
+                                  </pre>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </optgroup>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

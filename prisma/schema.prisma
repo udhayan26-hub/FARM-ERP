@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  farmName  String   @map("farm_name")
+  phone     String   @default("")
+  role      String   @default("owner")
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workers       Worker[]
+  tractors      Tractor[]
+  expenses      Expense[]
+  lands         Land[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Worker {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  phone       String   @default("")
+  village     String   @default("")
+  dailyWage   Float    @map("daily_wage")
+  wageType    String   @default("daily") @map("wage_type") // "daily", "weekly", "monthly"
+  monthlyWage Float?   @map("monthly_wage")
+  joinDate    DateTime @map("join_date")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user                User                 @relation(fields: [userId], references: [id])
+  attendance          Attendance[]
+  salaryRecords       SalaryRecord[]
+  payments            Payment[]
+  advanceTransactions AdvanceTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("workers")
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  workerId  String   @map("worker_id")
+  date      DateTime
+  status    String   @default("present") // "present", "absent", "half"
+  markedBy  String   @map("marked_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, date])
+  @@index([date])
+  @@index([workerId])
+  @@map("attendance")
+}
+
+model SalaryRecord {
+  id          String   @id @default(uuid())
+  workerId    String   @map("worker_id")
+  month       Int
+  year        Int
+  daysWorked  Int      @map("days_worked")
+  halfDays    Int      @default(0) @map("half_days")
+  dailyWage   Float    @map("daily_wage")
+  totalAmount Float    @map("total_amount")
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  worker   Worker          @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  payments SalaryPayment[]
+
+  @@unique([workerId, month, year])
+  @@index([workerId])
+  @@index([month, year])
+  @@map("salary_records")
+}
+
+model SalaryPayment {
+  id             String   @id @default(uuid())
+  salaryRecordId String   @map("salary_record_id")
+  amount         Float
+  paymentDate    DateTime @map("payment_date")
+  notes          String   @default("")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  salaryRecord SalaryRecord @relation(fields: [salaryRecordId], references: [id], onDelete: Cascade)
+
+  @@index([salaryRecordId])
+  @@map("salary_payments")
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  workerId    String   @map("worker_id")
+  date        DateTime
+  baseWage    Float    @default(0) @map("base_wage")
+  bonus       Float    @default(0)
+  deduction   Float    @default(0)
+  amount      Float    @default(0) // baseWage + bonus - deduction
+  status      String   @default("pending") // "paid", "unpaid", "pending"
+  notes       String   @default("")
+  paymentType String   @default("daily") @map("payment_type") // "daily", "weekly", "monthly"
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@index([status])
+  @@map("payments")
+}
+
+model AdvanceTransaction {
+  id             String   @id @default(uuid())
+  workerId       String   @map("worker_id")
+  date           DateTime
+  amountGiven    Float    @default(0) @map("amount_given")
+  amountReturned Float    @default(0) @map("amount_returned")
+  balance        Float    @default(0)
+  notes          String   @default("")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("advance_transactions")
+}
+
+model Tractor {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  name           String
+  registrationNo String   @map("registration_no")
+  model          String   @default("")
+  driverName     String   @map("driver_name")
+  purchaseDate   DateTime @map("purchase_date")
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id])
+  dieselLogs DieselLog[]
+
+  @@index([userId])
+  @@map("tractors")
+}
+
+model DieselLog {
+  id          String   @id @default(uuid())
+  tractorId   String   @map("tractor_id")
+  date        DateTime
+  liters      Float
+  cost        Float
+  hoursWorked Float    @map("hours_worked")
+  purpose     String   @default("other")
+  notes       String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tractor Tractor @relation(fields: [tractorId], references: [id], onDelete: Cascade)
+
+  @@index([tractorId])
+  @@index([date])
+  @@map("diesel_logs")
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  date        DateTime
+  category    String
+  amount      Float
+  description String   @default("")
+  notes       String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([date])
+  @@index([category])
+  @@map("expenses")
+}
+
+model Land {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  name        String
+  acres       Float
+  location    String    @default("")
+  crop        String    @default("")
+  sowingDate  DateTime? @map("sowing_date")
+  harvestDate DateTime? @map("harvest_date")
+  status      String    @default("active") // "active", "inactive"
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("lands")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  action    String
+  module    String   @default("other")
+  entity    String
+  entityId  String   @map("entity_id")
+  oldValue  String?  @map("old_value")
+  newValue  String?  @map("new_value")
+  notes     String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  type      String   @default("info")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
