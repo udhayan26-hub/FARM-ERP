@@ -9,6 +9,7 @@ import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import { getConsolidatedExpenses } from "@/actions/expense-breakdown";
+import { getAuditLogs } from "@/actions/audit-actions";
 
 const DEMO_USER_ID = "demo-user-001";
 
@@ -184,10 +185,11 @@ async function getCategoryData() {
 }
 
 export default async function DashboardPage() {
-  const [stats, expenseData, categoryData] = await Promise.all([
+  const [stats, expenseData, categoryData, logs] = await Promise.all([
     getDashboardStats(),
     getMonthlyExpenseData(),
     getCategoryData(),
+    getAuditLogs().then((res) => res.slice(0, 4)),
   ]);
 
   const statCards = [
@@ -260,7 +262,7 @@ export default async function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <ExpenseTrendChart data={expenseData} />
         <CategoryPieChart data={categoryData} />
-        <RecentActivity />
+        <RecentActivity logs={logs} />
       </div>
     </div>
   );

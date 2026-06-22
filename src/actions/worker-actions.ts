@@ -37,8 +37,37 @@ export async function getWorkers() {
       where: { userId },
       orderBy: { name: "asc" },
     });
-    console.log(`[DB] Fetched ${workers.length} workers`);
-    return workers;
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const workersWithStats = await Promise.all(
+      workers.map(async (w) => {
+        const attendance = await prisma.attendance.findMany({
+          where: {
+            workerId: w.id,
+            date: { gte: startOfMonth, lte: endOfMonth },
+          },
+        });
+
+        const daysPresent = attendance.filter((a) => a.status === "present").length;
+        const halfDays = attendance.filter((a) => a.status === "half").length;
+        const effectiveDays = daysPresent + halfDays * 0.5;
+        const currentMonthEarnings = effectiveDays * w.dailyWage;
+
+        return {
+          ...w,
+          daysWorked: daysPresent,
+          halfDays: halfDays,
+          effectiveDays,
+          currentMonthEarnings,
+        };
+      })
+    );
+
+    console.log(`[DB] Fetched ${workersWithStats.length} workers with monthly stats`);
+    return workersWithStats;
   } catch (error) {
     console.error("[DB] getWorkers failed:", error);
     return [];

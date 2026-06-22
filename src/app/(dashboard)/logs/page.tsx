@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getAuditLogs, deleteAuditLog, clearAllAuditLogs } from "@/actions/audit-actions";
-import { Search, Download, Calendar, SlidersHorizontal, RefreshCw, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Search, Calendar, SlidersHorizontal, RefreshCw, Eye, EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { exportData } from "@/lib/export-utils";
+import { ExportButton } from "@/components/shared/export-button";
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -105,26 +105,7 @@ export default function LogsPage() {
     setFilteredLogs(result);
   }, [search, module, startDate, endDate, logs]);
 
-  const handleExport = (format: "csv" | "excel" | "pdf") => {
-    if (filteredLogs.length === 0) {
-      toast.error("No logs available to export");
-      return;
-    }
 
-    // Format logs for export
-    const exportItems = filteredLogs.map((log) => ({
-      Timestamp: new Date(log.createdAt).toLocaleString(),
-      User: log.user?.name || "Admin",
-      Module: log.module.toUpperCase(),
-      Action: log.action,
-      "Entity ID": log.entityId,
-      "Old Value": log.oldValue || "-",
-      "New Value": log.newValue || "-",
-      Notes: log.notes || "-",
-    }));
-
-    exportData(exportItems, format, `activity_logs_${new Date().toISOString().split("T")[0]}`);
-  };
 
   const getModuleBadgeColor = (mod: string) => {
     switch (mod.toLowerCase()) {
@@ -172,17 +153,18 @@ export default function LogsPage() {
             <Trash2 className="h-4 w-4 mr-2" />
             Clear Logs
           </Button>
-          <Select onValueChange={(val: any) => handleExport(val)}>
-            <SelectTrigger className="w-[140px] h-9">
-              <Download className="h-4 w-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Export As" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="csv">CSV Sheet</SelectItem>
-              <SelectItem value="excel">Excel Sheet</SelectItem>
-              <SelectItem value="pdf">PDF Document</SelectItem>
-            </SelectContent>
-          </Select>
+          <ExportButton
+            data={filteredLogs.map((log) => ({
+              Timestamp: new Date(log.createdAt).toLocaleString(),
+              User: log.user?.name || "Admin",
+              Module: log.module.toUpperCase(),
+              Action: log.action,
+              "Entity ID": log.entityId,
+              Notes: log.notes || "-",
+            }))}
+            filename={`activity_logs_${new Date().toISOString().split("T")[0]}`}
+            placeholder="Export Logs"
+          />
         </div>
       </PageHeader>
 

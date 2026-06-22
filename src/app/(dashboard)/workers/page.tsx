@@ -17,13 +17,15 @@ export default async function WorkersPage() {
   const workers = await getWorkers();
   const activeCount = workers.filter((w) => w.status === "active").length;
 
-  const exportData = workers.map((w) => ({
+  const exportData = workers.map((w: any) => ({
     Name: w.name,
     Phone: w.phone || "-",
     Village: w.village || "-",
     "Daily Wage Rate": `₹${w.dailyWage}`,
     "Wage Type": w.wageType.toUpperCase(),
     "Monthly Salary": w.monthlyWage ? `₹${w.monthlyWage}` : "-",
+    "Days Worked (Month)": w.effectiveDays,
+    "Earnings (Month)": `₹${w.currentMonthEarnings}`,
     "Join Date": new Date(w.joinDate).toLocaleDateString(),
     Status: w.status.toUpperCase(),
   }));
@@ -91,7 +93,8 @@ export default async function WorkersPage() {
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Contact</th>
                   <th className="px-4 py-3 font-medium">Village</th>
-                  <th className="px-4 py-3 font-medium text-right">Daily Wage</th>
+                  <th className="px-4 py-3 font-medium text-right">Wage Rate</th>
+                  <th className="px-4 py-3 font-medium text-right">Work & Earnings (Month)</th>
                   <th className="px-4 py-3 font-medium">Join Date</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -101,7 +104,7 @@ export default async function WorkersPage() {
                 {workers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -118,7 +121,7 @@ export default async function WorkersPage() {
                     </td>
                   </tr>
                 ) : (
-                  workers.map((worker) => (
+                  workers.map((worker: any) => (
                     <tr
                       key={worker.id}
                       className="hover:bg-muted/50 transition-colors"
@@ -141,6 +144,23 @@ export default async function WorkersPage() {
                       <td className="px-4 py-3">{worker.village || "—"}</td>
                       <td className="px-4 py-3 text-right font-medium">
                         ₹{worker.dailyWage.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {worker.wageType === "monthly" && worker.monthlyWage ? (
+                          <div>
+                            <p className="font-semibold text-foreground">₹{worker.monthlyWage.toLocaleString()} /mo</p>
+                            <p className="text-[10px] text-muted-foreground">{worker.effectiveDays} days present</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-semibold text-foreground">
+                              ₹{worker.currentMonthEarnings.toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {worker.effectiveDays} d × ₹{worker.dailyWage}
+                            </p>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                         {formatDate(worker.joinDate)}

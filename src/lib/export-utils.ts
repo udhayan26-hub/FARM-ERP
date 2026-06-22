@@ -3,7 +3,8 @@ import { toast } from "sonner";
 export function exportData(
   data: Array<Record<string, any>>,
   format: "csv" | "excel" | "pdf",
-  filename: string
+  filename: string,
+  printWindow?: Window | null
 ) {
   try {
     if (!data || data.length === 0) {
@@ -47,8 +48,8 @@ export function exportData(
     } else if (format === "pdf") {
       // 2. Generate PDF using browser printing window
       const headers = Object.keys(data[0]);
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
+      const targetWindow = printWindow || window.open("", "_blank");
+      if (!targetWindow) {
         toast.error("Popup blocked! Please allow popups to export PDF.");
         return;
       }
@@ -158,8 +159,9 @@ export function exportData(
         </html>
       `;
 
-      printWindow.document.write(html);
-      printWindow.document.close();
+      targetWindow.document.open();
+      targetWindow.document.write(html);
+      targetWindow.document.close();
       toast.success("PDF print layout opened successfully!");
     }
   } catch (error: any) {

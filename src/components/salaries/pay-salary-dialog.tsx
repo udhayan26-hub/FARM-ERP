@@ -158,17 +158,7 @@ export function PaySalaryDialog({ isOpen, onClose, worker, month, year, onSucces
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="baseWage">Base Wage (₹)</Label>
-              <Button
-                variant="link"
-                className="h-auto p-0 text-[10px] text-primary"
-                onClick={() => setOverrideWage(!overrideWage)}
-                disabled={isPending}
-              >
-                {overrideWage ? "Use Calculated" : "Override Amount"}
-              </Button>
-            </div>
+            <Label htmlFor="baseWage">Base Wage (₹)</Label>
             <div className="relative">
               <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -176,8 +166,11 @@ export function PaySalaryDialog({ isOpen, onClose, worker, month, year, onSucces
                 type="number"
                 className="pl-9 h-9 font-semibold"
                 value={baseWage}
-                onChange={(e) => setBaseWage(e.target.value)}
-                disabled={!overrideWage || isPending}
+                onChange={(e) => {
+                  setBaseWage(e.target.value);
+                  setOverrideWage(true);
+                }}
+                disabled={isPending}
               />
             </div>
           </div>
