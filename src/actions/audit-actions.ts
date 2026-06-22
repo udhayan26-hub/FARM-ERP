@@ -41,6 +41,8 @@ export interface GetAuditLogsFilters {
   search?: string;
   startDate?: string;
   endDate?: string;
+  page?: number;
+  limit?: number;
 }
 
 export async function getAuditLogs(filters: GetAuditLogsFilters = {}) {
@@ -74,9 +76,15 @@ export async function getAuditLogs(filters: GetAuditLogsFilters = {}) {
       }
     }
 
+    const page = filters.page || 1;
+    const limit = filters.limit || 50;
+    const skip = (page - 1) * limit;
+
     const logs = await prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: skip,
       include: {
         user: {
           select: {
@@ -91,6 +99,43 @@ export async function getAuditLogs(filters: GetAuditLogsFilters = {}) {
   } catch (error: any) {
     console.error("[LOG] Failed to fetch audit logs:", error);
     return [];
+  }
+}
+
+export async function getAuditLogsCount(filters: GetAuditLogsFilters = {}) {
+  try {
+    const where: any = {
+      userId: DEMO_USER_ID,
+    };
+
+    if (filters.module && filters.module !== "all") {
+      where.module = filters.module;
+    }
+
+    if (filters.search) {
+      where.OR = [
+        { action: { contains: filters.search } },
+        { notes: { contains: filters.search } },
+        { entityId: { contains: filters.search } },
+      ];
+    }
+
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        where.createdAt.gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
+    return await prisma.auditLog.count({ where });
+  } catch (error: any) {
+    console.error("[LOG] Failed to fetch audit logs count:", error);
+    return 0;
   }
 }
 

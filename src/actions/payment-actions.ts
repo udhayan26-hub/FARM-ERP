@@ -269,21 +269,28 @@ export async function getAdvancesLedger() {
       orderBy: { name: "asc" },
     });
 
-    const ledger = await Promise.all(
-      workers.map(async (w) => {
-        const latestTx = await prisma.advanceTransaction.findFirst({
-          where: { workerId: w.id },
-          orderBy: { createdAt: "desc" },
-        });
-        return {
-          id: w.id,
-          name: w.name,
-          phone: w.phone,
-          village: w.village,
-          balance: latestTx ? latestTx.balance : 0,
-        };
-      })
-    );
+    if (workers.length === 0) return [];
+
+    const workerIds = workers.map((w) => w.id);
+
+    // Fetch all advance transactions for active workers ordered by createdAt asc
+    const allTxs = await prisma.advanceTransaction.findMany({
+      where: { workerId: { in: workerIds } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const balanceMap = new Map<string, number>();
+    for (const tx of allTxs) {
+      balanceMap.set(tx.workerId, tx.balance);
+    }
+
+    const ledger = workers.map((w) => ({
+      id: w.id,
+      name: w.name,
+      phone: w.phone,
+      village: w.village,
+      balance: balanceMap.get(w.id) ?? 0,
+    }));
 
     return ledger;
   } catch (error) {
@@ -319,46 +326,52 @@ export async function getMonthlySalariesData(month: number, year: number) {
       },
     });
 
-    const salaries = await Promise.all(
-      workers.map(async (worker) => {
-        const workerAttendance = attendance.filter((a) => a.workerId === worker.id);
-        const daysPresent = workerAttendance.filter((a) => a.status === "present").length;
-        const halfDays = workerAttendance.filter((a) => a.status === "half").length;
-        const effectiveDays = daysPresent + halfDays * 0.5;
+    const workerIds = workers.map((w) => w.id);
 
-        let calculatedBase = effectiveDays * worker.dailyWage;
-        if (worker.wageType === "monthly" && worker.monthlyWage) {
-          calculatedBase = worker.monthlyWage;
-        }
+    // Fetch all advance transactions for these active workers ordered by createdAt asc
+    const allTxs = await prisma.advanceTransaction.findMany({
+      where: { workerId: { in: workerIds } },
+      orderBy: { createdAt: "asc" },
+    });
 
-        const workerPayment = payments.find((p) => p.workerId === worker.id);
+    const balanceMap = new Map<string, number>();
+    for (const tx of allTxs) {
+      balanceMap.set(tx.workerId, tx.balance);
+    }
 
-        const latestTx = await prisma.advanceTransaction.findFirst({
-          where: { workerId: worker.id },
-          orderBy: { createdAt: "desc" },
-        });
-        const advanceBalance = latestTx ? latestTx.balance : 0;
+    const salaries = workers.map((worker) => {
+      const workerAttendance = attendance.filter((a) => a.workerId === worker.id);
+      const daysPresent = workerAttendance.filter((a) => a.status === "present").length;
+      const halfDays = workerAttendance.filter((a) => a.status === "half").length;
+      const effectiveDays = daysPresent + halfDays * 0.5;
 
-        return {
-          id: worker.id,
-          name: worker.name,
-          village: worker.village,
-          dailyWage: worker.dailyWage,
-          wageType: worker.wageType,
-          monthlyWage: worker.monthlyWage,
-          daysWorked: daysPresent,
-          halfDays: halfDays,
-          calculatedBase,
-          status: workerPayment ? "paid" : "pending",
-          paidAmount: workerPayment ? workerPayment.amount : 0,
-          baseWage: workerPayment ? workerPayment.baseWage : calculatedBase,
-          bonus: workerPayment ? workerPayment.bonus : 0,
-          deduction: workerPayment ? workerPayment.deduction : 0,
-          notes: workerPayment ? workerPayment.notes : "",
-          advanceBalance,
-        };
-      })
-    );
+      let calculatedBase = effectiveDays * worker.dailyWage;
+      if (worker.wageType === "monthly" && worker.monthlyWage) {
+        calculatedBase = worker.monthlyWage;
+      }
+
+      const workerPayment = payments.find((p) => p.workerId === worker.id);
+      const advanceBalance = balanceMap.get(worker.id) ?? 0;
+
+      return {
+        id: worker.id,
+        name: worker.name,
+        village: worker.village,
+        dailyWage: worker.dailyWage,
+        wageType: worker.wageType,
+        monthlyWage: worker.monthlyWage,
+        daysWorked: daysPresent,
+        halfDays: halfDays,
+        calculatedBase,
+        status: workerPayment ? "paid" : "pending",
+        paidAmount: workerPayment ? workerPayment.amount : 0,
+        baseWage: workerPayment ? workerPayment.baseWage : calculatedBase,
+        bonus: workerPayment ? workerPayment.bonus : 0,
+        deduction: workerPayment ? workerPayment.deduction : 0,
+        notes: workerPayment ? workerPayment.notes : "",
+        advanceBalance,
+      };
+    });
 
     return salaries;
   } catch (error) {

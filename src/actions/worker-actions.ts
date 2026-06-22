@@ -38,35 +38,47 @@ export async function getWorkers() {
       orderBy: { name: "asc" },
     });
 
+    if (workers.length === 0) return [];
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const workersWithStats = await Promise.all(
-      workers.map(async (w) => {
-        const attendance = await prisma.attendance.findMany({
-          where: {
-            workerId: w.id,
-            date: { gte: startOfMonth, lte: endOfMonth },
-          },
-        });
+    const workerIds = workers.map((w) => w.id);
 
-        const daysPresent = attendance.filter((a) => a.status === "present").length;
-        const halfDays = attendance.filter((a) => a.status === "half").length;
-        const effectiveDays = daysPresent + halfDays * 0.5;
-        const currentMonthEarnings = effectiveDays * w.dailyWage;
+    // Fetch all attendance for these workers in a single batch query
+    const allAttendance = await prisma.attendance.findMany({
+      where: {
+        workerId: { in: workerIds },
+        date: { gte: startOfMonth, lte: endOfMonth },
+      },
+    });
 
-        return {
-          ...w,
-          daysWorked: daysPresent,
-          halfDays: halfDays,
-          effectiveDays,
-          currentMonthEarnings,
-        };
-      })
-    );
+    // Group attendance by workerId in memory
+    const attendanceMap = new Map<string, typeof allAttendance>();
+    for (const a of allAttendance) {
+      const list = attendanceMap.get(a.workerId) || [];
+      list.push(a);
+      attendanceMap.set(a.workerId, list);
+    }
 
-    console.log(`[DB] Fetched ${workersWithStats.length} workers with monthly stats`);
+    const workersWithStats = workers.map((w) => {
+      const attendance = attendanceMap.get(w.id) || [];
+      const daysPresent = attendance.filter((a) => a.status === "present").length;
+      const halfDays = attendance.filter((a) => a.status === "half").length;
+      const effectiveDays = daysPresent + halfDays * 0.5;
+      const currentMonthEarnings = effectiveDays * w.dailyWage;
+
+      return {
+        ...w,
+        daysWorked: daysPresent,
+        halfDays: halfDays,
+        effectiveDays,
+        currentMonthEarnings,
+      };
+    });
+
+    console.log(`[DB] Fetched ${workersWithStats.length} workers with monthly stats (Optimized)`);
     return workersWithStats;
   } catch (error) {
     console.error("[DB] getWorkers failed:", error);

@@ -4,6 +4,7 @@ import { Bell, Menu, Moon, Search, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -96,11 +97,11 @@ export function TopNav() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/settings")}>
-              Profile
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="w-full cursor-pointer">Profile</Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push("/settings")}>
-              Settings
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="w-full cursor-pointer">Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>

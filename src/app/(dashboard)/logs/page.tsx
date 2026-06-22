@@ -8,14 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getAuditLogs, deleteAuditLog, clearAllAuditLogs } from "@/actions/audit-actions";
+import { getAuditLogs, getAuditLogsCount, deleteAuditLog, clearAllAuditLogs } from "@/actions/audit-actions";
 import { Search, Calendar, SlidersHorizontal, RefreshCw, Eye, EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ExportButton } from "@/components/shared/export-button";
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<any[]>([]);
-  const [filteredLogs, setFilteredLogs] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
@@ -26,12 +27,27 @@ export default function LogsPage() {
   const [endDate, setEndDate] = useState("");
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
-  const fetchLogs = async () => {
+  const limit = 50;
+
+  const fetchLogs = async (currentPage: number = 1) => {
     setLoading(true);
     try {
-      const data = await getAuditLogs();
+      const filters = {
+        search: search.trim() || undefined,
+        module: module !== "all" ? module : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        page: currentPage,
+        limit,
+      };
+
+      const [data, count] = await Promise.all([
+        getAuditLogs(filters),
+        getAuditLogsCount(filters),
+      ]);
+
       setLogs(data);
-      setFilteredLogs(data);
+      setTotalCount(count);
     } catch (error) {
       toast.error("Failed to load audit logs");
     } finally {
@@ -39,9 +55,20 @@ export default function LogsPage() {
     }
   };
 
+  // Debounce search and trigger fetch on filter change
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    const delayDebounce = setTimeout(() => {
+      setPage(1);
+      fetchLogs(1);
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [search, module, startDate, endDate]);
+
+  // Fetch when page changes
+  useEffect(() => {
+    fetchLogs(page);
+  }, [page]);
 
   const handleDeleteLog = (id: string) => {
     if (confirm("Are you sure you want to delete this log entry?")) {
@@ -49,7 +76,7 @@ export default function LogsPage() {
         const res = await deleteAuditLog(id);
         if (res.success) {
           toast.success("Log entry deleted successfully");
-          fetchLogs();
+          fetchLogs(page);
         } else {
           toast.error(res.error || "Failed to delete log entry");
         }
@@ -63,47 +90,14 @@ export default function LogsPage() {
         const res = await clearAllAuditLogs();
         if (res.success) {
           toast.success("All logs cleared successfully");
-          fetchLogs();
+          setPage(1);
+          fetchLogs(1);
         } else {
           toast.error(res.error || "Failed to clear logs");
         }
       });
     }
   };
-
-  // Run filtering client-side for instant UX
-  useEffect(() => {
-    let result = [...logs];
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (log) =>
-          log.action.toLowerCase().includes(q) ||
-          log.notes.toLowerCase().includes(q) ||
-          log.entityId.toLowerCase().includes(q) ||
-          (log.user?.name && log.user.name.toLowerCase().includes(q))
-      );
-    }
-
-    if (module && module !== "all") {
-      result = result.filter((log) => log.module.toLowerCase() === module.toLowerCase());
-    }
-
-    if (startDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      result = result.filter((log) => new Date(log.createdAt) >= start);
-    }
-
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      result = result.filter((log) => new Date(log.createdAt) <= end);
-    }
-
-    setFilteredLogs(result);
-  }, [search, module, startDate, endDate, logs]);
 
 
 
@@ -140,7 +134,7 @@ export default function LogsPage() {
     <div className="space-y-6">
       <PageHeader title="Activity Logs" description="Audit trail of all operations and database modifications">
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => fetchLogs(page)} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -154,7 +148,7 @@ export default function LogsPage() {
             Clear Logs
           </Button>
           <ExportButton
-            data={filteredLogs.map((log) => ({
+            data={logs.map((log) => ({
               Timestamp: new Date(log.createdAt).toLocaleString(),
               User: log.user?.name || "Admin",
               Module: log.module.toUpperCase(),
@@ -273,14 +267,14 @@ export default function LogsPage() {
                       </div>
                     </td>
                   </tr>
-                ) : filteredLogs.length === 0 ? (
+                ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
                       No logs match the current search or filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredLogs.map((log) => {
+                  logs.map((log) => {
                     const isExpanded = expandedLog === log.id;
                     const hasValues = log.oldValue || log.newValue;
 
@@ -367,6 +361,60 @@ export default function LogsPage() {
             </table>
           </div>
         </CardContent>
+        {/* Pagination Footer */}
+        {totalCount > limit && (
+          <div className="flex items-center justify-between px-5 py-3 bg-muted/10 border-t border-muted rounded-b-md">
+            <div className="flex flex-1 justify-between sm:hidden">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= Math.ceil(totalCount / limit) || loading}
+                onClick={() => setPage((prev) => prev + 1)}
+              >
+                Next
+              </Button>
+            </div>
+            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Showing <span className="font-semibold text-foreground">{(page - 1) * limit + 1}</span> to{" "}
+                  <span className="font-semibold text-foreground">
+                    {Math.min(page * limit, totalCount)}
+                  </span>{" "}
+                  of <span className="font-semibold text-foreground">{totalCount}</span> results
+                </p>
+              </div>
+              <div className="flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={page >= Math.ceil(totalCount / limit) || loading}
+                  onClick={() => setPage((prev) => prev + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

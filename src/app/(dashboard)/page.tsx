@@ -2,8 +2,30 @@ import { Users, DollarSign, Tractor, Droplets, Zap, Wallet, ArrowDownRight, Cloc
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
-import { ExpenseTrendChart, CategoryPieChart } from "@/components/dashboard/charts";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
+import dynamicImport from "next/dynamic";
+
+const ExpenseTrendChart = dynamicImport(
+  () => import("@/components/dashboard/charts").then((mod) => mod.ExpenseTrendChart),
+  {
+    loading: () => (
+      <div className="col-span-1 lg:col-span-4 h-[350px] bg-muted/20 animate-pulse rounded-md flex items-center justify-center border text-xs text-muted-foreground font-semibold">
+        Loading Expense Trend...
+      </div>
+    ),
+  }
+);
+
+const CategoryPieChart = dynamicImport(
+  () => import("@/components/dashboard/charts").then((mod) => mod.CategoryPieChart),
+  {
+    loading: () => (
+      <div className="col-span-1 lg:col-span-3 h-[350px] bg-muted/20 animate-pulse rounded-md flex items-center justify-center border text-xs text-muted-foreground font-semibold">
+        Loading Expense Breakdown...
+      </div>
+    ),
+  }
+);
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
@@ -142,16 +164,16 @@ async function getDashboardStats() {
 
 async function getMonthlyExpenseData() {
   try {
-    const results = [];
     const now = new Date();
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
-    for (let i = 5; i >= 0; i--) {
+    const monthPromises = Array.from({ length: 6 }, (_, index) => {
+      const i = 5 - index;
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const start = new Date(d.getFullYear(), d.getMonth(), 1);
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
 
-      const [pSum, eSum, dSum] = await Promise.all([
+      return Promise.all([
         prisma.payment.aggregate({
           where: { status: "paid", date: { gte: start, lte: end } },
           _sum: { amount: true },
@@ -164,12 +186,13 @@ async function getMonthlyExpenseData() {
           where: { date: { gte: start, lte: end } },
           _sum: { cost: true },
         }),
-      ]);
+      ]).then(([pSum, eSum, dSum]) => {
+        const total = (pSum._sum.amount ?? 0) + (eSum._sum.amount ?? 0) + (dSum._sum.cost ?? 0);
+        return { name: months[d.getMonth()], amount: total };
+      });
+    });
 
-      const total = (pSum._sum.amount ?? 0) + (eSum._sum.amount ?? 0) + (dSum._sum.cost ?? 0);
-      results.push({ name: months[d.getMonth()], amount: total });
-    }
-    return results;
+    return await Promise.all(monthPromises);
   } catch {
     return [];
   }

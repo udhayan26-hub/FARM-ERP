@@ -51,6 +51,7 @@ model Worker {
 
   @@index([userId])
   @@index([status])
+  @@index([createdAt])
   @@map("workers")
 }
 
@@ -67,6 +68,7 @@ model Attendance {
   @@unique([workerId, date])
   @@index([date])
   @@index([workerId])
+  @@index([createdAt])
   @@map("attendance")
 }
 
@@ -122,6 +124,8 @@ model Payment {
 
   @@index([workerId])
   @@index([status])
+  @@index([date])
+  @@index([createdAt])
   @@map("payments")
 }
 
@@ -138,6 +142,8 @@ model AdvanceTransaction {
   worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
   @@index([workerId])
+  @@index([date])
+  @@index([createdAt])
   @@map("advance_transactions")
 }
 
@@ -157,6 +163,7 @@ model Tractor {
   dieselLogs DieselLog[]
 
   @@index([userId])
+  @@index([createdAt])
   @@map("tractors")
 }
 
@@ -175,6 +182,7 @@ model DieselLog {
 
   @@index([tractorId])
   @@index([date])
+  @@index([createdAt])
   @@map("diesel_logs")
 }
 
@@ -194,6 +202,7 @@ model Expense {
   @@index([userId])
   @@index([date])
   @@index([category])
+  @@index([createdAt])
   @@map("expenses")
 }
 
@@ -215,6 +224,7 @@ model Land {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([createdAt])
   @@map("lands")
 }
 
@@ -234,6 +244,7 @@ model AuditLog {
 
   @@index([userId])
   @@index([entity, entityId])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
